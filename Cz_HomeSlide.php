@@ -61,7 +61,7 @@ class Cz_HomeSlide extends ObjectModel
 	public function add($autodate = true, $null_values = false)
 	{
 		$context = Context::getContext();
-		$id_shop = $context->shop->id;
+		$id_shop = (int)$context->shop->id;
 
 		$res = parent::add($autodate, $null_values);
 		$res &= Db::getInstance()->execute('
@@ -96,9 +96,9 @@ class Cz_HomeSlide extends ObjectModel
 
 	public function reOrderPositions()
 	{
-		$id_slide = $this->id;
+		$id_slide = (int)$this->id;
 		$context = Context::getContext();
-		$id_shop = $context->shop->id;
+		$id_shop = (int)$context->shop->id;
 
 		$max = Db::getInstance(_PS_USE_SQL_SLAVE_)->executeS('
 			SELECT MAX(hss.`position`) as position
@@ -129,6 +129,11 @@ class Cz_HomeSlide extends ObjectModel
 
 	public static function getAssociatedIdsShop($id_slide)
 	{
+		$id_slide = (int)$id_slide;
+		if ($id_slide <= 0) {
+			return false;
+		}
+
 		$result = Db::getInstance(_PS_USE_SQL_SLAVE_)->executeS('
 			SELECT hs.`id_shop`
 			FROM `'._DB_PREFIX_.'czhomeslider` hs

@@ -43,7 +43,7 @@ class Cz_ImageSlider extends Module implements WidgetInterface
     {
         $this->name = 'cz_imageslider';
         $this->tab = 'front_office_features';
-        $this->version = '1.0.0';
+        $this->version = '1.0.1';
         $this->author = 'Codezeel';
         $this->need_instance = 0;
         $this->secure_key = Tools::encrypt($this->name);
@@ -164,7 +164,8 @@ class Cz_ImageSlider extends Module implements WidgetInterface
             CREATE TABLE IF NOT EXISTS `'._DB_PREFIX_.'czhomeslider` (
                 `id_czhomeslider_slides` int(10) unsigned NOT NULL AUTO_INCREMENT,
                 `id_shop` int(10) unsigned NOT NULL,
-                PRIMARY KEY (`id_czhomeslider_slides`, `id_shop`)
+                PRIMARY KEY (`id_czhomeslider_slides`, `id_shop`),
+                KEY `id_shop` (`id_shop`)
             ) ENGINE='._MYSQL_ENGINE_.' DEFAULT CHARSET=UTF8;
         ');
 
@@ -174,7 +175,8 @@ class Cz_ImageSlider extends Module implements WidgetInterface
               `id_czhomeslider_slides` int(10) unsigned NOT NULL AUTO_INCREMENT,
               `position` int(10) unsigned NOT NULL DEFAULT \'0\',
               `active` tinyint(1) unsigned NOT NULL DEFAULT \'0\',
-              PRIMARY KEY (`id_czhomeslider_slides`)
+              PRIMARY KEY (`id_czhomeslider_slides`),
+              KEY `active_position` (`active`, `position`)
             ) ENGINE='._MYSQL_ENGINE_.' DEFAULT CHARSET=UTF8;
         ');
 
@@ -187,7 +189,8 @@ class Cz_ImageSlider extends Module implements WidgetInterface
               `legend` varchar(255) NOT NULL,
               `url` varchar(255) NOT NULL,
               `image` varchar(255) NOT NULL,
-              PRIMARY KEY (`id_czhomeslider_slides`,`id_lang`)
+              PRIMARY KEY (`id_czhomeslider_slides`,`id_lang`),
+              KEY `id_lang` (`id_lang`)
             ) ENGINE='._MYSQL_ENGINE_.' DEFAULT CHARSET=UTF8;
         ');
 
@@ -510,11 +513,13 @@ class Cz_ImageSlider extends Module implements WidgetInterface
 
     public function renderWidget($hookName = null, array $configuration = [])
     {
-        if (!$this->isCached($this->templateFile, $this->getCacheId())) {
+        $cacheId = $this->getCacheId('cz_imageslider');
+
+        if (!$this->isCached($this->templateFile, $cacheId)) {
             $this->smarty->assign($this->getWidgetVariables($hookName, $configuration));
         }
 
-        return $this->fetch($this->templateFile, $this->getCacheId());
+        return $this->fetch($this->templateFile, $cacheId);
     }
 
     public function getWidgetVariables($hookName = null, array $configuration = [])
@@ -522,7 +527,13 @@ class Cz_ImageSlider extends Module implements WidgetInterface
         $slides = $this->getSlides(true);
         if (is_array($slides)) {
             foreach ($slides as &$slide) {
-                $slide['sizes'] = @getimagesize((dirname(__FILE__) . DIRECTORY_SEPARATOR . 'views/img' . DIRECTORY_SEPARATOR . $slide['image']));
+                // Sanitize output for XSS protection
+                $slide['title'] = isset($slide['title']) ? htmlspecialchars($slide['title'], ENT_QUOTES, 'UTF-8') : '';
+                $slide['legend'] = isset($slide['legend']) ? htmlspecialchars($slide['legend'], ENT_QUOTES, 'UTF-8') : '';
+                $slide['url'] = isset($slide['url']) ? htmlspecialchars($slide['url'], ENT_QUOTES, 'UTF-8') : '';
+
+                $imagePath = dirname(__FILE__) . DIRECTORY_SEPARATOR . 'views/img' . DIRECTORY_SEPARATOR . basename($slide['image']);
+                $slide['sizes'] = @getimagesize($imagePath);
                 if (isset($slide['sizes'][3]) && $slide['sizes'][3]) {
                     $slide['size'] = $slide['sizes'][3];
                 }
@@ -533,7 +544,7 @@ class Cz_ImageSlider extends Module implements WidgetInterface
 
         return [
             'czhomeslider' => [
-                'speed' => $config['CZHOMESLIDER_SPEED'],
+                'speed' => (int)$config['CZHOMESLIDER_SPEED'],
                 'pause' => $config['CZHOMESLIDER_PAUSE_ON_HOVER'] ? 'true' : 'false',
                 'slides' => $slides,
             ],
@@ -543,15 +554,26 @@ class Cz_ImageSlider extends Module implements WidgetInterface
     public function clearCache()
     {
         $this->_clearCache($this->templateFile);
+        // Clear PrestaShop cache
+        if (method_exists('Tools', 'clearCache')) {
+            Tools::clearCache();
+        }
     }
 
     public function hookActionShopDataDuplication($params)
     {
+        $new_id_shop = (int)$params['new_id_shop'];
+        $old_id_shop = (int)$params['old_id_shop'];
+
+        if ($new_id_shop <= 0 || $old_id_shop <= 0) {
+            return;
+        }
+
         Db::getInstance()->execute('
             INSERT IGNORE INTO '._DB_PREFIX_.'czhomeslider (id_czhomeslider_slides, id_shop)
-            SELECT id_czhomeslider_slides, '.(int)$params['new_id_shop'].'
+            SELECT id_czhomeslider_slides, '.(int)$new_id_shop.'
             FROM '._DB_PREFIX_.'czhomeslider
-            WHERE id_shop = '.(int)$params['old_id_shop']
+            WHERE id_shop = '.(int)$old_id_shop
         );
         $this->clearCache();
     }
@@ -589,10 +611,12 @@ class Cz_ImageSlider extends Module implements WidgetInterface
 
     public function getNextPosition()
     {
+        $id_shop = (int)$this->context->shop->id;
+
         $row = Db::getInstance(_PS_USE_SQL_SLAVE_)->getRow('
             SELECT MAX(hss.`position`) AS `next_position`
             FROM `'._DB_PREFIX_.'czhomeslider_slides` hss, `'._DB_PREFIX_.'czhomeslider` hs
-            WHERE hss.`id_czhomeslider_slides` = hs.`id_czhomeslider_slides` AND hs.`id_shop` = '.(int)$this->context->shop->id
+            WHERE hss.`id_czhomeslider_slides` = hs.`id_czhomeslider_slides` AND hs.`id_shop` = '.(int)$id_shop
         );
 
         return (++$row['next_position']);
@@ -601,8 +625,8 @@ class Cz_ImageSlider extends Module implements WidgetInterface
     public function getSlides($active = null)
     {
         $this->context = Context::getContext();
-        $id_shop = $this->context->shop->id;
-        $id_lang = $this->context->language->id;
+        $id_shop = (int)$this->context->shop->id;
+        $id_lang = (int)$this->context->language->id;
 
         $slides = Db::getInstance(_PS_USE_SQL_SLAVE_)->executeS('
             SELECT hs.`id_czhomeslider_slides` as id_slide, hss.`position`, hss.`active`, hssl.`title`,
@@ -610,14 +634,14 @@ class Cz_ImageSlider extends Module implements WidgetInterface
             FROM '._DB_PREFIX_.'czhomeslider hs
             LEFT JOIN '._DB_PREFIX_.'czhomeslider_slides hss ON (hs.id_czhomeslider_slides = hss.id_czhomeslider_slides)
             LEFT JOIN '._DB_PREFIX_.'czhomeslider_slides_lang hssl ON (hss.id_czhomeslider_slides = hssl.id_czhomeslider_slides)
-            WHERE id_shop = '.(int)$id_shop.'
+            WHERE hs.id_shop = '.(int)$id_shop.'
             AND hssl.id_lang = '.(int)$id_lang.
             ($active ? ' AND hss.`active` = 1' : ' ').'
             ORDER BY hss.position'
         );
 
         foreach ($slides as &$slide) {
-            $slide['image_url'] = $this->context->link->getMediaLink(_MODULE_DIR_.'cz_imageslider/views/img/'.$slide['image']);
+            $slide['image_url'] = $this->context->link->getMediaLink(_MODULE_DIR_.'cz_imageslider/views/img/'.pSQL($slide['image']));
         }
 
         return $slides;
@@ -628,8 +652,16 @@ class Cz_ImageSlider extends Module implements WidgetInterface
         $this->context = Context::getContext();
         $images = array();
 
-        if (!isset($id_shop))
-            $id_shop = $this->context->shop->id;
+        $id_slides = (int)$id_slides;
+        if (!isset($id_shop)) {
+            $id_shop = (int)$this->context->shop->id;
+        } else {
+            $id_shop = (int)$id_shop;
+        }
+
+        if ($id_slides <= 0 || $id_shop <= 0) {
+            return $images;
+        }
 
         $results = Db::getInstance(_PS_USE_SQL_SLAVE_)->executeS('
             SELECT hssl.`image`, hssl.`id_lang`
@@ -640,8 +672,9 @@ class Cz_ImageSlider extends Module implements WidgetInterface
             ($active ? ' AND hss.`active` = 1' : ' ')
         );
 
-        foreach ($results as $result)
-            $images[$result['id_lang']] = $result['image'];
+        foreach ($results as $result) {
+            $images[(int)$result['id_lang']] = $result['image'];
+        }
 
         return $images;
     }
@@ -661,6 +694,11 @@ class Cz_ImageSlider extends Module implements WidgetInterface
 
     public function slideExists($id_slide)
     {
+        $id_slide = (int)$id_slide;
+        if ($id_slide <= 0) {
+            return false;
+        }
+
         $req = 'SELECT hs.`id_czhomeslider_slides` as id_slide
                 FROM `'._DB_PREFIX_.'czhomeslider` hs
                 WHERE hs.`id_czhomeslider_slides` = '.(int)$id_slide;

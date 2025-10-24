@@ -38,11 +38,25 @@ if (Tools::getValue('action') == 'updateSlidesPosition' && Tools::getValue('slid
 {
 	$slides = Tools::getValue('slides');
 
+	if (!is_array($slides)) {
+		die(1);
+	}
+
 	foreach ($slides as $position => $id_slide)
+	{
+		$position = (int)$position;
+		$id_slide = (int)$id_slide;
+
+		if ($position < 0 || $id_slide <= 0) {
+			continue;
+		}
+
 		$res = Db::getInstance()->execute('
-			UPDATE `'._DB_PREFIX_.'czhomeslider_slides` SET `position` = '.(int)$position.'
+			UPDATE `'._DB_PREFIX_.'czhomeslider_slides`
+			SET `position` = '.(int)$position.'
 			WHERE `id_czhomeslider_slides` = '.(int)$id_slide
 		);
+	}
 
 	$home_slider->clearCache();
 }
