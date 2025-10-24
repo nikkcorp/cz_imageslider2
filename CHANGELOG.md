@@ -8,11 +8,15 @@
   - Fixed SQL injection vulnerabilities in `Cz_HomeSlide.php`
   - Fixed SQL injection vulnerabilities in `cz_imageslider.php`
   - Added validation checks for all user inputs used in database queries
+  - All parameters properly cast to (int) before SQL queries
 
-- **XSS Protection**: Added output sanitization
-  - Added `htmlspecialchars()` for title, legend, and URL outputs
-  - Added `pSQL()` for image paths
-  - Added `basename()` to prevent directory traversal attacks
+- **Path Traversal Protection**:
+  - Added `basename()` in getWidgetVariables to prevent directory traversal attacks
+  - Image paths are sanitized before filesystem operations
+
+- **XSS Protection**:
+  - Data already protected through ObjectModel validation (isCleanHtml, isUrl)
+  - Template-level escaping handled by Smarty engine
 
 ### Performance Improvements
 - **Database Optimization**: Added indexes for better query performance
@@ -21,14 +25,15 @@
   - Added index on `id_lang` in `czhomeslider_slides_lang` table
   - These improvements significantly enhance performance for sites with 5000-10000 products
 
-- **Caching Improvements**:
-  - Improved cache key generation for better cache isolation
-  - Enhanced PrestaShop cache compatibility
-  - Added proper cache invalidation
+- **Caching**:
+  - Uses standard PrestaShop getCacheId() for proper cache isolation by shop/language/currency
+  - Module cache cleared on slide changes without affecting global PrestaShop cache
+  - Full compatibility with PrestaShop 1.7.8.11 caching system
 
 ### Other Changes
 - Updated module version to 1.0.1
 - Added upgrade script for existing installations
 - Minimal code changes to maintain backward compatibility
+- No performance degradation - only improvements
 
 ## [1.0.0] - Initial Release

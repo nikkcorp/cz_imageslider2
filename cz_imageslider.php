@@ -513,13 +513,11 @@ class Cz_ImageSlider extends Module implements WidgetInterface
 
     public function renderWidget($hookName = null, array $configuration = [])
     {
-        $cacheId = $this->getCacheId('cz_imageslider');
-
-        if (!$this->isCached($this->templateFile, $cacheId)) {
+        if (!$this->isCached($this->templateFile, $this->getCacheId())) {
             $this->smarty->assign($this->getWidgetVariables($hookName, $configuration));
         }
 
-        return $this->fetch($this->templateFile, $cacheId);
+        return $this->fetch($this->templateFile, $this->getCacheId());
     }
 
     public function getWidgetVariables($hookName = null, array $configuration = [])
@@ -527,11 +525,7 @@ class Cz_ImageSlider extends Module implements WidgetInterface
         $slides = $this->getSlides(true);
         if (is_array($slides)) {
             foreach ($slides as &$slide) {
-                // Sanitize output for XSS protection
-                $slide['title'] = isset($slide['title']) ? htmlspecialchars($slide['title'], ENT_QUOTES, 'UTF-8') : '';
-                $slide['legend'] = isset($slide['legend']) ? htmlspecialchars($slide['legend'], ENT_QUOTES, 'UTF-8') : '';
-                $slide['url'] = isset($slide['url']) ? htmlspecialchars($slide['url'], ENT_QUOTES, 'UTF-8') : '';
-
+                // Security: use basename to prevent directory traversal
                 $imagePath = dirname(__FILE__) . DIRECTORY_SEPARATOR . 'views/img' . DIRECTORY_SEPARATOR . basename($slide['image']);
                 $slide['sizes'] = @getimagesize($imagePath);
                 if (isset($slide['sizes'][3]) && $slide['sizes'][3]) {
@@ -554,10 +548,6 @@ class Cz_ImageSlider extends Module implements WidgetInterface
     public function clearCache()
     {
         $this->_clearCache($this->templateFile);
-        // Clear PrestaShop cache
-        if (method_exists('Tools', 'clearCache')) {
-            Tools::clearCache();
-        }
     }
 
     public function hookActionShopDataDuplication($params)
@@ -641,7 +631,7 @@ class Cz_ImageSlider extends Module implements WidgetInterface
         );
 
         foreach ($slides as &$slide) {
-            $slide['image_url'] = $this->context->link->getMediaLink(_MODULE_DIR_.'cz_imageslider/views/img/'.pSQL($slide['image']));
+            $slide['image_url'] = $this->context->link->getMediaLink(_MODULE_DIR_.'cz_imageslider/views/img/'.$slide['image']);
         }
 
         return $slides;
