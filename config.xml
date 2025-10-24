@@ -2,7 +2,7 @@
 <module>
     <name>cz_imageslider</name>
     <displayName><![CDATA[CZ - Image slider]]></displayName>
-    <version><![CDATA[1.0.0]]></version>
+    <version><![CDATA[1.0.1]]></version>
     <description><![CDATA[Display Image Slider on Homepage.]]></description>
     <author><![CDATA[Codezeel]]></author>
     <tab><![CDATA[front_office_features]]></tab>
